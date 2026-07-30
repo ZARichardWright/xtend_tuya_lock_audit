@@ -89,6 +89,7 @@ from .multi_manager.shared.threading import (
 from .models import (
     XTDPCodeIntegerNoMinMaxCheckWrapper,
 )
+from .lock_audit import async_setup_entry as async_setup_lock_audit
 from tuya_device_handlers.device_wrapper.sensor import (
     ElectricityCurrentJsonWrapper,
     ElectricityCurrentRawWrapper,
@@ -2085,6 +2086,7 @@ async def async_setup_entry(
     this_platform = Platform.SENSOR
     if entry.runtime_data.multi_manager is None or hass_data.manager is None:
         return
+    await async_setup_lock_audit(hass, entry, async_add_entities)
 
     supported_descriptors, externally_managed_descriptors = cast(
         tuple[

@@ -364,6 +364,7 @@ def is_config_entry_master(
 async def async_unload_entry(hass: HomeAssistant, entry: XTConfigEntry) -> bool:
     """Unloading the Tuya platforms."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        hass.data.get(DOMAIN, {}).pop(f"audit_{entry.entry_id}", None)
         tuya = entry.runtime_data
         if tuya.manager is not None:
             if tuya.manager.mq is not None:
