@@ -29,6 +29,20 @@ PENDING_ATTRIBUTION_TTL_MS = 30 * 60 * 1000
 ATTRIBUTION_MATCH_WINDOW_MS = 10 * 60 * 1000
 MATCHED_ATTRIBUTION_TTL_MS = 45 * 24 * 60 * 60 * 1000
 PUSH_REFRESH_DELAYS = (3, 10, 30)
+TEMPORARY_PASSWORD_TERMINAL_PHASES = {3, 4, 5, 17}
+
+
+def _is_current_temporary_password(
+    item: dict[str, Any], now: int
+) -> bool:
+    try:
+        invalid_time = int(item.get("invalid_time") or 0)
+    except (TypeError, ValueError):
+        return False
+    return (
+        invalid_time > now
+        and item.get("phase") not in TEMPORARY_PASSWORD_TERMINAL_PHASES
+    )
 
 
 class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -203,10 +217,22 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             user_name,
         )
 
-    def temporary_passwords(self, device_id: str) -> list[dict[str, Any]]:
+    def temporary_password_records(
+        self, device_id: str
+    ) -> list[dict[str, Any]]:
+        """Return every temporary-password record retained by Tuya."""
         device = (self.data or {}).get("devices", {}).get(device_id, {})
         passwords = device.get("temporary_passwords", [])
         return passwords if isinstance(passwords, list) else []
+
+    def temporary_passwords(self, device_id: str) -> list[dict[str, Any]]:
+        """Return credentials that can still be current on the lock."""
+        now = int(dt_util.utcnow().timestamp())
+        return [
+            item
+            for item in self.temporary_password_records(device_id)
+            if _is_current_temporary_password(item, now)
+        ]
 
     async def async_create_temporary_pin(
         self,
@@ -540,6 +566,19 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     passwords if isinstance(passwords, list) else []
                 )
                 result["devices"][device_id] = device
+                now = int(dt_util.utcnow().timestamp())
+                current_passwords = [
+                    item
+                    for item in device["temporary_passwords"]
+                    if _is_current_temporary_password(item, now)
+                ]
+                LOGGER.debug(
+                    "Device %s returned %d current temporary PIN(s) "
+                    "from %d cloud record(s)",
+                    device_id,
+                    len(current_passwords),
+                    len(device["temporary_passwords"]),
+                )
                 LOGGER.debug(
                     "Device %s (%s) returned %d audit record(s)",
                     device_id,

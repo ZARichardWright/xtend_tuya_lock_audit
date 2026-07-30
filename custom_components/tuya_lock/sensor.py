@@ -201,7 +201,10 @@ class TemporaryPinCountSensor(
         return {
             "temporary_passwords": self.coordinator.temporary_passwords(
                 self.device_id
-            )
+            ),
+            "cloud_record_count": len(
+                self.coordinator.temporary_password_records(self.device_id)
+            ),
         }
 
 

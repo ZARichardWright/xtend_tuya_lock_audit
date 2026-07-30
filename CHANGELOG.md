@@ -1,5 +1,13 @@
 # Tuya Lock Audit release notes
 
+## 0.4.1 — 2026-07-30
+
+- Filters expired and terminal-phase records from the current temporary-PIN
+  count and deletion selector.
+- Retains Tuya's unfiltered historical record count as the diagnostic
+  `cloud_record_count` sensor attribute.
+- Prevents old cloud records from appearing as usable PINs after each API poll.
+
 ## 0.4.0 — 2026-07-30
 
 - Added native entities for temporary PIN management: name, validity, PIN
