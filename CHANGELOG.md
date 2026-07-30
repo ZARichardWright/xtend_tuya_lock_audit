@@ -1,5 +1,12 @@
 # Tuya Lock Audit release notes
 
+## 0.2.0 — 2026-07-30
+
+- Restored the basic Home Assistant lock entity.
+- Added live lock-state polling from lock status DPs.
+- Added lock and unlock controls using Tuya's password-free door-operation API.
+- Ported the original Xtend Tuya lock operation sequence, including operation tickets.
+
 ## 0.1.3 — 2026-07-30
 
 - Moved all Tuya network requests into Home Assistant's executor.

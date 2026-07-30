@@ -37,11 +37,14 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             end = int(dt_util.utcnow().timestamp() * 1000)
             start = end - 30 * 24 * 60 * 60 * 1000
             for device_id in device_ids:
+                status_rows = self.client.get(f"/v1.0/iot-03/devices/{device_id}/status").get("result", [])
+                status = {str(row.get("code")): row.get("value") for row in status_rows if isinstance(row, dict)}
                 logs = self.client.get(
                     f"/v1.1/devices/{device_id}/door-lock/open-logs",
                     {"page_no": 1, "page_size": 100, "start_time": start, "end_time": end},
                 ).get("result", {}).get("logs", [])
                 device = self.devices.setdefault(device_id, {"id": device_id, "name": device_id})
+                device["status"] = status
                 result["devices"][device_id] = device
                 for record in logs if isinstance(logs, list) else []:
                     item = dict(record)

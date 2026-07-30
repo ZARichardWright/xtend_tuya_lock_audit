@@ -22,11 +22,12 @@ class TuyaClient:
         self.access_token = ""
         self.token_expires = 0.0
 
-    def _request(self, method: str, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> dict[str, Any]:
         query = urlencode(sorted((params or {}).items()), doseq=True)
         request_path = path + (f"?{query}" if query else "")
         timestamp = str(int(time.time() * 1000))
-        body_hash = hashlib.sha256(b"").hexdigest()
+        body_bytes = b"" if body is None else json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode()
+        body_hash = hashlib.sha256(body_bytes).hexdigest()
         to_sign = f"{method.upper()}\n{body_hash}\n\n{request_path}"
         message = self.access_id + self.access_token + timestamp + to_sign
         sign = hmac.new(self.access_secret.encode(), message.encode(), hashlib.sha256).hexdigest().upper()
@@ -37,10 +38,12 @@ class TuyaClient:
             "sign": sign,
             "lang": "en",
         }
+        if body is not None:
+            headers["Content-Type"] = "application/json"
         if self.access_token:
             headers["access_token"] = self.access_token
         try:
-            response = requests.get(self.endpoint + request_path, headers=headers, timeout=20)
+            response = requests.request(method.upper(), self.endpoint + request_path, headers=headers, data=body_bytes if body is not None else None, timeout=20)
             data = response.json()
         except (requests.RequestException, ValueError) as err:
             raise TuyaError(str(err)) from err
@@ -67,3 +70,7 @@ class TuyaClient:
                 return self._request("GET", path, params)
             raise
 
+    def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        if not self.access_token or time.time() >= self.token_expires:
+            self.authenticate()
+        return self._request("POST", path, body=body)
