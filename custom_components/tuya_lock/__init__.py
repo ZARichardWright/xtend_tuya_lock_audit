@@ -31,6 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass, entry.data[CONF_ENDPOINT], entry.data[CONF_ACCESS_ID], entry.data[CONF_ACCESS_SECRET], entry.data.get(CONF_DEVICE_ID, "")
     )
     coordinator.entry_id = entry.entry_id
+    await coordinator.async_load_attributions()
     await coordinator.async_config_entry_first_refresh()
     if not coordinator.data or not coordinator.data.get("devices"):
         LOGGER.error("No Tuya lock devices were available after the first refresh")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -45,14 +46,18 @@ def _record(raw: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
         mapping[slot] = f"Fingerprint slot {slot}"
     timestamp = raw.get("update_time", 0)
     timestamp = float(timestamp) / 1000 if float(timestamp or 0) > 10_000_000_000 else float(timestamp or 0)
+    tuya_user = raw.get("nick_name") or raw.get("unlock_name") or ""
     return {
         "time": datetime.fromtimestamp(timestamp, dt_util.DEFAULT_TIME_ZONE).isoformat() if timestamp else "",
         "method": code.removeprefix("unlock_").removesuffix("_kit").replace("_", " ").title(),
         "method_code": code,
         "slot": slot,
         "slot_name": mapping.get(slot, "") if slot else "",
-        "user": raw.get("nick_name") or raw.get("unlock_name") or "",
+        "user": raw.get("ha_user_name") or tuya_user,
         "user_id": raw.get("user_id", ""),
+        "tuya_user": tuya_user,
+        "ha_user_id": raw.get("ha_user_id", ""),
+        "ha_user_name": raw.get("ha_user_name", ""),
         "value": value,
         "device_id": raw.get("device_id", ""),
         "device_name": raw.get("device_name", ""),
@@ -138,7 +143,12 @@ class LockAuditMarkdownSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
             markdown.append("| " + " | ".join(values) + " |")
         if not records:
             markdown.append("| No unlock records found |  |  |")
-        return {"markdown": "\n".join(markdown), "record_count": len(records)}
+        rendered = "\n".join(markdown)
+        return {
+            "markdown": rendered,
+            "record_count": len(records),
+            "render_revision": hashlib.sha256(rendered.encode()).hexdigest()[:12],
+        }
 
 
 class TuyaLockVersionSensor(SensorEntity):

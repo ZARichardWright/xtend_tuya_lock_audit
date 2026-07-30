@@ -5,10 +5,11 @@ from typing import Any
 
 from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .client import TuyaError
 from .const import DOMAIN
@@ -60,15 +61,22 @@ class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
         return None
 
     async def async_lock(self, **kwargs: Any) -> None:
-        await self._async_operate(True)
+        await self._async_operate(True, self._context)
 
     async def async_unlock(self, **kwargs: Any) -> None:
-        await self._async_operate(False)
+        await self._async_operate(False, self._context)
 
-    async def _async_operate(self, lock: bool) -> None:
+    async def _async_operate(self, lock: bool, context: Context | None) -> None:
+        requested_at = int(dt_util.utcnow().timestamp() * 1000)
         LOGGER.info("Requesting %s operation for lock %s", "lock" if lock else "unlock", self.device_id)
         try:
             await self.hass.async_add_executor_job(self._operate_sync, lock)
+            if not lock:
+                await self.coordinator.async_register_remote_unlock(
+                    self.device_id,
+                    context,
+                    requested_at,
+                )
             await self.coordinator.async_request_refresh()
             LOGGER.info("%s operation accepted for lock %s", "Lock" if lock else "Unlock", self.device_id)
         except TuyaError as err:

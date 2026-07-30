@@ -1,5 +1,17 @@
 # Tuya Lock Audit release notes
 
+## 0.2.6 — 2026-07-30
+
+- Attributes Home Assistant remote unlocks to the logged-in Home Assistant user
+  who requested them.
+- Persists pending and matched attribution records across Home Assistant
+  restarts and overlays the Home Assistant user on Tuya `Phone Remote` events.
+- Adds a Markdown render revision and immediately notifies audit sensors when a
+  fingerprint Text entity changes, so dashboard Markdown refreshes without
+  waiting for the next cloud poll.
+- Adds the issue tracker and correct manifest key ordering required by current
+  HACS and hassfest validation.
+
 ## 0.2.5 — 2026-07-30
 
 - Fixed lock/unlock operations failing because the password-ticket POST request

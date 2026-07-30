@@ -13,6 +13,8 @@ Xtend Tuya integration and does not replace it.
 - Polls the lock open-log endpoint once per minute.
 - Exposes latest unlock method, user, fingerprint slot, slot name, raw value,
   and record count as Home Assistant sensors.
+- Attributes dashboard and app unlock requests to the logged-in Home Assistant
+  user while retaining Tuya's original remote-user value in sensor attributes.
 - Automatically maintains `/config/tuya_lock/fingerprint_map.json`.
 - Exposes a small diagnostic version sensor for troubleshooting.
 

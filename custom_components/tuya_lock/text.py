@@ -63,6 +63,7 @@ class FingerprintNameText(CoordinatorEntity[LockCoordinator], TextEntity):
         await self.hass.async_add_executor_job(_save, self.hass, self.coordinator.mapping)
         self._attr_native_value = value.strip()
         self.async_write_ha_state()
+        self.coordinator.async_update_listeners()
 
 
 async def async_setup_entry(
