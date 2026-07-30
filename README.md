@@ -8,7 +8,8 @@ Xtend Tuya integration and does not replace it.
 ## What it does
 
 - Configures directly with a Tuya IoT endpoint, Access ID, and Access Secret.
-- Discovers only devices reporting `unlock_*` lock functions.
+- First filters Tuya devices to the smart-lock category family (`ms` and
+  known lock subtypes), then confirms they report `unlock_*` lock functions.
 - Polls the lock open-log endpoint once per minute.
 - Exposes latest unlock method, user, fingerprint slot, slot name, raw value,
   and record count as Home Assistant sensors.

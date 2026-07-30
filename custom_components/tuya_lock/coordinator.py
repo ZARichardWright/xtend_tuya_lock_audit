@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .client import TuyaClient, TuyaError
+from .const import LOCK_CATEGORIES
 
 
 class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -55,6 +56,8 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for item in devices if isinstance(devices, list) else []:
             device_id = item.get("id")
             if not device_id:
+                continue
+            if str(item.get("category", "")).lower() not in LOCK_CATEGORIES:
                 continue
             status = self.client.get(f"/v1.0/iot-03/devices/{device_id}/status").get("result", [])
             codes = {str(row.get("code", "")) for row in status if isinstance(row, dict)}
