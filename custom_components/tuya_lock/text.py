@@ -46,7 +46,7 @@ class FingerprintNameText(CoordinatorEntity[LockCoordinator], TextEntity):
 
     async def async_set_value(self, value: str) -> None:
         self.coordinator.mapping[self.slot] = value.strip()
-        _save(self.hass, self.coordinator.mapping)
+        await self.hass.async_add_executor_job(_save, self.hass, self.coordinator.mapping)
         self._attr_native_value = value.strip()
         self.async_write_ha_state()
 
@@ -55,7 +55,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: LockCoordinator = hass.data[DOMAIN][entry.entry_id]
-    coordinator.mapping.update(_load(hass))
+    coordinator.mapping.update(await hass.async_add_executor_job(_load, hass))
     slots = set(coordinator.mapping)
     for item in (coordinator.data or {}).get("logs", []):
         status: dict[str, Any] = item.get("status") or {}
@@ -64,5 +64,5 @@ async def async_setup_entry(
     mapping = coordinator.mapping
     for slot in slots:
         mapping.setdefault(slot, f"Fingerprint slot {slot}")
-    _save(hass, mapping)
+    await hass.async_add_executor_job(_save, hass, mapping)
     async_add_entities([FingerprintNameText(coordinator, slot, mapping[slot]) for slot in sorted(slots)])

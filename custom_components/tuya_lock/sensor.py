@@ -71,10 +71,7 @@ class LockAuditSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
 
     @property
     def _records(self) -> list[dict[str, Any]]:
-        before = dict(self.coordinator.mapping)
         records = [_record(item, self.coordinator.mapping) for item in (self.coordinator.data or {}).get("logs", []) if item.get("device_id") == self.device_id]
-        if before != self.coordinator.mapping:
-            _save_mapping(self.hass, self.coordinator.mapping)
         return records
 
     @property
@@ -140,7 +137,7 @@ class TuyaLockVersionSensor(SensorEntity):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: LockCoordinator = hass.data[DOMAIN][entry.entry_id]
-    mapping = _mapping(hass)
+    mapping = await hass.async_add_executor_job(_mapping, hass)
     coordinator.mapping = mapping
     entities: list[LockAuditSensor] = []
     for device_id, device in coordinator.data.get("devices", {}).items():
@@ -149,5 +146,4 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
             entities.append(LockAuditSensor(coordinator, device_id, kind, name))
     entities.append(LockAuditMarkdownSensor(coordinator))
     entities.append(TuyaLockVersionSensor())
-    _save_mapping(hass, mapping)
     async_add_entities(entities)

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import json
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -29,6 +31,7 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _update_sync(self) -> dict[str, Any]:
         try:
+            mapping = self._load_mapping()
             device_ids = [self.requested_device_id] if self.requested_device_id else self._discover_ids()
             result: dict[str, Any] = {"devices": {}, "logs": []}
             end = int(dt_util.utcnow().timestamp() * 1000)
@@ -45,7 +48,13 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     item["device_id"] = device_id
                     item["device_name"] = device["name"]
                     result["logs"].append(item)
+                    status = item.get("status") or {}
+                    if status.get("code") == "unlock_fingerprint_kit" and status.get("value") not in (None, ""):
+                        slot = str(status["value"])
+                        mapping.setdefault(slot, f"Fingerprint slot {slot}")
             result["logs"].sort(key=lambda item: item.get("update_time", 0), reverse=True)
+            self.mapping = mapping
+            self._save_mapping(mapping)
             return result
         except TuyaError:
             raise
@@ -71,3 +80,19 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.devices[device_id] = {"id": device_id, "name": item.get("name") or device_id}
                 lock_ids.append(device_id)
         return lock_ids
+
+    def _mapping_path(self) -> Path:
+        return Path(self.hass.config.path("tuya_lock", "fingerprint_map.json"))
+
+    def _load_mapping(self) -> dict[str, str]:
+        try:
+            data = json.loads(self._mapping_path().read_text())
+            slots = data.get("slots", data) if isinstance(data, dict) else {}
+            return {str(key): str(value) for key, value in slots.items()}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def _save_mapping(self, mapping: dict[str, str]) -> None:
+        path = self._mapping_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"slots": dict(sorted(mapping.items()))}, indent=2) + "\n")
