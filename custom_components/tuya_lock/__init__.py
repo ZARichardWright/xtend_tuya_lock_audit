@@ -9,7 +9,7 @@ from homeassistant.helpers.device_registry import async_get as async_get_device_
 from .const import CONF_ACCESS_ID, CONF_ACCESS_SECRET, CONF_DEVICE_ID, CONF_ENDPOINT, DOMAIN
 from .coordinator import LockCoordinator
 
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.TEXT]
 LOGGER = logging.getLogger(__name__)
 
 
