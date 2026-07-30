@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tuya Lock Audit",
+        "description": "Enter Tuya IoT cloud credentials. Leave Device ID empty to discover lock devices.",
+        "data": {
+          "endpoint": "Tuya endpoint",
+          "access_id": "Access ID",
+          "access_secret": "Access Secret",
+          "device_id": "Optional lock device ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Tuya",
+      "not_a_lock": "The supplied device is not reporting lock functions",
+      "no_locks": "No lock devices were found"
+    }
+  }
+}

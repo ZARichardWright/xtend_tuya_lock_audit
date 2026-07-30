@@ -1,0 +1,11 @@
+{
+  "domain": "tuya_lock",
+  "name": "Tuya Lock Audit",
+  "version": "0.1.0",
+  "documentation": "https://github.com/ZARichardWright/xtend_tuya_lock_audit",
+  "config_flow": true,
+  "codeowners": ["@ZARichardWright"],
+  "requirements": ["requests>=2.31.0"],
+  "iot_class": "cloud_polling",
+  "integration_type": "hub"
+}

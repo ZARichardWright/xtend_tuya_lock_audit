@@ -1,0 +1,6 @@
+DOMAIN = "tuya_lock"
+CONF_ENDPOINT = "endpoint"
+CONF_ACCESS_ID = "access_id"
+CONF_ACCESS_SECRET = "access_secret"
+CONF_DEVICE_ID = "device_id"
+DEFAULT_ENDPOINT = "https://openapi.tuyaeu.com"
