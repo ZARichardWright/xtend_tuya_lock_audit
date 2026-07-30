@@ -1,5 +1,10 @@
 # Tuya Lock Audit release notes
 
+## 0.2.5 — 2026-07-30
+
+- Fixed lock/unlock operations failing because the password-ticket POST request
+  correctly has no JSON body.
+
 ## 0.2.4 — 2026-07-30
 
 - Removed the device-ID column from the Markdown audit table.

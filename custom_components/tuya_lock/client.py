@@ -90,7 +90,9 @@ class TuyaClient:
                 return self._request("GET", path, params)
             raise
 
-    def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    def post(
+        self, path: str, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         if not self.access_token or time.time() >= self.token_expires:
             self.authenticate()
         return self._request("POST", path, body=body)
