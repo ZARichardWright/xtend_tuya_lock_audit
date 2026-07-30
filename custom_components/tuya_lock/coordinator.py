@@ -23,7 +23,13 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            device_ids = [self.requested_device_id] if self.requested_device_id else await self._discover_ids()
+            return await self.hass.async_add_executor_job(self._update_sync)
+        except TuyaError as err:
+            raise UpdateFailed(str(err)) from err
+
+    def _update_sync(self) -> dict[str, Any]:
+        try:
+            device_ids = [self.requested_device_id] if self.requested_device_id else self._discover_ids()
             result: dict[str, Any] = {"devices": {}, "logs": []}
             end = int(dt_util.utcnow().timestamp() * 1000)
             start = end - 30 * 24 * 60 * 60 * 1000
@@ -41,10 +47,10 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     result["logs"].append(item)
             result["logs"].sort(key=lambda item: item.get("update_time", 0), reverse=True)
             return result
-        except TuyaError as err:
-            raise UpdateFailed(str(err)) from err
+        except TuyaError:
+            raise
 
-    async def _discover_ids(self) -> list[str]:
+    def _discover_ids(self) -> list[str]:
         token = self.client.get("/v1.0/token", {"grant_type": 1}).get("result", {})
         self.client.access_token = token.get("access_token", "")
         self.client.token_expires = __import__("time").time() + float(token.get("expire_time", 7200)) - 60
