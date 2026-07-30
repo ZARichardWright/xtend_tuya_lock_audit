@@ -1,7 +1,7 @@
 {
   "domain": "tuya_lock",
   "name": "Tuya Lock Audit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "documentation": "https://github.com/ZARichardWright/xtend_tuya_lock_audit",
   "config_flow": true,
   "codeowners": ["@ZARichardWright"],

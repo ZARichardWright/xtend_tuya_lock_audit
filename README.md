@@ -14,6 +14,7 @@ Xtend Tuya integration and does not replace it.
 - Exposes latest unlock method, user, fingerprint slot, slot name, raw value,
   and record count as Home Assistant sensors.
 - Automatically maintains `/config/tuya_lock/fingerprint_map.json`.
+- Exposes a small diagnostic version sensor for troubleshooting.
 
 The original Xtend Tuya integration can remain installed separately for other
 devices. This repository intentionally contains only `custom_components/tuya_lock`.

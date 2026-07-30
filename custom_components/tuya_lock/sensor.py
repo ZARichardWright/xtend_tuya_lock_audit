@@ -7,13 +7,14 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import LockCoordinator
 
 
@@ -126,6 +127,17 @@ class LockAuditMarkdownSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
         return {"markdown": "\n".join(markdown), "record_count": len(records)}
 
 
+class TuyaLockVersionSensor(SensorEntity):
+    _attr_name = "Tuya Lock Audit Version"
+    _attr_unique_id = "tuya_lock_audit_version"
+    _attr_icon = "mdi:information-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> str:
+        return VERSION
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: LockCoordinator = hass.data[DOMAIN][entry.entry_id]
     mapping = _mapping(hass)
@@ -136,5 +148,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         for kind in ("time", "method", "user", "slot", "slot_name", "value", "count"):
             entities.append(LockAuditSensor(coordinator, device_id, kind, name))
     entities.append(LockAuditMarkdownSensor(coordinator))
+    entities.append(TuyaLockVersionSensor())
     _save_mapping(hass, mapping)
     async_add_entities(entities)
