@@ -13,6 +13,8 @@ from .client import TuyaError
 from .const import DOMAIN
 from .coordinator import LockCoordinator
 
+LOGGER = logging.getLogger(__name__)
+
 
 class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
     def __init__(self, coordinator: LockCoordinator, device_id: str, name: str) -> None:
@@ -21,18 +23,33 @@ class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
         self._attr_name = name
         self._attr_unique_id = f"{device_id}_lock"
         self._attr_icon = "mdi:lock"
+        LOGGER.info("Created Home Assistant lock entity for %s (%s)", name, device_id)
 
     @property
     def is_locked(self) -> bool | None:
         status = (self.coordinator.data or {}).get("devices", {}).get(self.device_id, {}).get("status", {})
         if isinstance(status.get("lock_motor_state"), bool):
-            return not status["lock_motor_state"]
+            locked = not status["lock_motor_state"]
+            LOGGER.debug(
+                "Lock %s state from lock_motor_state=%s -> locked=%s",
+                self.device_id,
+                status["lock_motor_state"],
+                locked,
+            )
+            return locked
         for code in ("open_close", "closed_opened", "closed_opened_kit"):
             value = str(status.get(code, "")).lower()
             if value in {"closed", "close", "aqac"}:
+                LOGGER.debug("Lock %s state from %s=%s -> locked", self.device_id, code, value)
                 return True
             if value in {"open", "opened", "aqab"}:
+                LOGGER.debug("Lock %s state from %s=%s -> unlocked", self.device_id, code, value)
                 return False
+        LOGGER.warning(
+            "Could not determine lock state for %s; available status codes: %s",
+            self.device_id,
+            sorted(status),
+        )
         return None
 
     def lock(self, **kwargs: Any) -> None:
@@ -42,11 +59,13 @@ class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
         self.hass.async_create_task(self._async_operate(False))
 
     async def _async_operate(self, lock: bool) -> None:
+        LOGGER.info("Requesting %s operation for lock %s", "lock" if lock else "unlock", self.device_id)
         try:
             await self.hass.async_add_executor_job(self._operate_sync, lock)
             await self.coordinator.async_request_refresh()
+            LOGGER.info("%s operation accepted for lock %s", "Lock" if lock else "Unlock", self.device_id)
         except TuyaError as err:
-            logging.getLogger(__name__).error("Lock command failed for %s: %s", self.device_id, err)
+            LOGGER.error("Lock command failed for %s: %s", self.device_id, err)
 
     def _operate_sync(self, lock: bool) -> None:
         client = self.coordinator.client
@@ -64,7 +83,9 @@ class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: LockCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([
+    entities = [
         TuyaLockEntity(coordinator, device_id, device.get("name", device_id))
         for device_id, device in coordinator.data.get("devices", {}).items()
-    ])
+    ]
+    LOGGER.info("Lock platform adding %d entity/entities", len(entities))
+    async_add_entities(entities)

@@ -1,5 +1,12 @@
 # Tuya Lock Audit release notes
 
+## 0.2.2 — 2026-07-30
+
+- Added safe debug logging for config setup, cloud requests, device discovery,
+  returned lock status codes, platform forwarding, lock-entity creation, state
+  interpretation, and lock/unlock operations.
+- Sensitive credentials, tokens, ticket IDs, and PIN values are not logged.
+
 ## 0.2.1 — 2026-07-30
 
 - Updated the config flow to the current Home Assistant typed flow pattern.

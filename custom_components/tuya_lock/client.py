@@ -3,11 +3,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import time
 from urllib.parse import urlencode
 from typing import Any
 
 import requests
+
+LOGGER = logging.getLogger(__name__)
 
 
 class TuyaError(Exception):
@@ -42,22 +45,39 @@ class TuyaClient:
             headers["Content-Type"] = "application/json"
         if self.access_token:
             headers["access_token"] = self.access_token
+        LOGGER.debug("Tuya request: %s %s", method.upper(), request_path)
         try:
             response = requests.request(method.upper(), self.endpoint + request_path, headers=headers, data=body_bytes if body is not None else None, timeout=20)
             data = response.json()
         except (requests.RequestException, ValueError) as err:
             raise TuyaError(str(err)) from err
         if response.ok and data.get("success") is True:
+            LOGGER.debug(
+                "Tuya request succeeded: %s %s (HTTP %s)",
+                method.upper(),
+                path,
+                response.status_code,
+            )
             return data
+        LOGGER.warning(
+            "Tuya request failed: %s %s (HTTP %s, code=%s, message=%s)",
+            method.upper(),
+            path,
+            response.status_code,
+            data.get("code"),
+            data.get("msg"),
+        )
         raise TuyaError(data.get("msg", f"Tuya HTTP {response.status_code}"))
 
     def authenticate(self) -> None:
+        LOGGER.debug("Authenticating with Tuya endpoint %s", self.endpoint)
         result = self._request("GET", "/v1.0/token", {"grant_type": 1})
         token = result.get("result", {}).get("access_token")
         if not token:
             raise TuyaError("Tuya did not return an access token")
         self.access_token = token
         self.token_expires = time.time() + float(result.get("result", {}).get("expire_time", 7200)) - 60
+        LOGGER.debug("Tuya authentication succeeded")
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if not self.access_token or time.time() >= self.token_expires:
