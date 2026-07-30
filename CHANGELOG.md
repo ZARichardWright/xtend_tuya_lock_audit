@@ -1,5 +1,12 @@
 # Tuya Lock Audit release notes
 
+## 0.2.4 — 2026-07-30
+
+- Removed the device-ID column from the Markdown audit table.
+- Combined user and fingerprint slot information into one User column.
+- Fingerprint events show the mapped name when available, otherwise their slot
+  number; code and card events use Tuya's reported user name.
+
 ## 0.2.3 — 2026-07-30
 
 - Replaced threaded lock callbacks with Home Assistant-native async lock and

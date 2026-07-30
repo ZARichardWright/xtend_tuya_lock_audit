@@ -1,5 +1,5 @@
 DOMAIN = "tuya_lock"
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 CONF_ENDPOINT = "endpoint"
 CONF_ACCESS_ID = "access_id"
 CONF_ACCESS_SECRET = "access_secret"

@@ -115,20 +115,29 @@ class LockAuditMarkdownSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
         markdown = [
             "## Tuya Lock Audit",
             "",
-            "| Time | Device | Method | User | Slot |",
-            "|---|---|---|---|---|",
+            "| Time | Method | User |",
+            "|---|---|---|",
         ]
         for item in records[:20]:
+            if item.get("method_code") == "unlock_fingerprint_kit":
+                slot = item.get("slot", "")
+                mapped_name = item.get("slot_name", "")
+                default_name = f"Fingerprint slot {slot}"
+                audit_user = (
+                    mapped_name
+                    if mapped_name and mapped_name != default_name
+                    else f"Fingerprint slot {slot}"
+                )
+            else:
+                audit_user = item.get("user", "") or "-"
             values = (
                 item.get("time", "")[:19].replace("T", " "),
-                item.get("device_name", "").replace("|", "\\|"),
                 item.get("method", "").replace("|", "\\|"),
-                item.get("user", "") or "-",
-                (f"{item.get('slot')} — {item.get('slot_name')}" if item.get("slot") else "-"),
+                str(audit_user).replace("|", "\\|"),
             )
             markdown.append("| " + " | ".join(values) + " |")
         if not records:
-            markdown.append("| No unlock records found |  |  |  |  |")
+            markdown.append("| No unlock records found |  |  |")
         return {"markdown": "\n".join(markdown), "record_count": len(records)}
 
 
