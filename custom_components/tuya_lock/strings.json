@@ -18,5 +18,43 @@
       "no_locks": "No lock devices were found",
       "unknown": "Unexpected error; check the Home Assistant log"
     }
+  },
+  "services": {
+    "create_temporary_pin": {
+      "name": "Create temporary PIN",
+      "description": "Generates a temporary PIN, sends it to the lock, and displays it in a persistent notification.",
+      "fields": {
+        "device_id": {
+          "name": "Tuya device ID",
+          "description": "Optional when exactly one Tuya lock is configured."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Friendly name shown in the lock's temporary PIN list."
+        },
+        "validity_minutes": {
+          "name": "Validity",
+          "description": "Number of minutes the PIN remains valid."
+        },
+        "pin_length": {
+          "name": "PIN length",
+          "description": "Number of digits in the generated PIN."
+        }
+      }
+    },
+    "delete_temporary_pin": {
+      "name": "Delete temporary PIN",
+      "description": "Deletes a temporary PIN using its exact Tuya password ID.",
+      "fields": {
+        "device_id": {
+          "name": "Tuya device ID",
+          "description": "Optional when exactly one Tuya lock is configured."
+        },
+        "password_id": {
+          "name": "Password ID",
+          "description": "Exact ID exposed by the Temporary PIN Count sensor."
+        }
+      }
+    }
   }
 }

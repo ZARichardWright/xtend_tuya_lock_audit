@@ -1,0 +1,10 @@
+{
+  "services": {
+    "create_temporary_pin": {
+      "service": "mdi:key-plus"
+    },
+    "delete_temporary_pin": {
+      "service": "mdi:key-remove"
+    }
+  }
+}

@@ -66,6 +66,39 @@ class FingerprintNameText(CoordinatorEntity[LockCoordinator], TextEntity):
         self.coordinator.async_update_listeners()
 
 
+class TemporaryPinNameText(CoordinatorEntity[LockCoordinator], TextEntity):
+    _attr_native_max = 80
+    _attr_icon = "mdi:form-textbox"
+
+    def __init__(
+        self,
+        coordinator: LockCoordinator,
+        device_id: str,
+        device_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.device_id = device_id
+        coordinator.temporary_pin_name.setdefault(device_id, "Guest")
+        self._attr_name = "Temporary PIN Name"
+        self._attr_unique_id = f"{device_id}_temporary_pin_name"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=device_name,
+            manufacturer="Tuya",
+            model="Smart Lock",
+        )
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.temporary_pin_name[self.device_id]
+
+    async def async_set_value(self, value: str) -> None:
+        value = value.strip()
+        if value:
+            self.coordinator.temporary_pin_name[self.device_id] = value
+            self.async_write_ha_state()
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -85,11 +118,13 @@ async def async_setup_entry(
         return
     device_id, device = next(iter(devices.items()))
     device_name = device.get("name", device_id)
-    async_add_entities(
-        [
+    entities: list[TextEntity] = [
             FingerprintNameText(
                 coordinator, slot, mapping[slot], device_id, device_name
             )
             for slot in sorted(slots)
         ]
+    entities.append(
+        TemporaryPinNameText(coordinator, device_id, device_name)
     )
+    async_add_entities(entities)

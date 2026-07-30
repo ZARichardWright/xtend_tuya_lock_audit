@@ -170,6 +170,41 @@ class TuyaLockVersionSensor(SensorEntity):
         return VERSION
 
 
+class TemporaryPinCountSensor(
+    CoordinatorEntity[LockCoordinator], SensorEntity
+):
+    _attr_name = "Temporary PIN Count"
+    _attr_icon = "mdi:key-chain"
+
+    def __init__(
+        self,
+        coordinator: LockCoordinator,
+        device_id: str,
+        device_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.device_id = device_id
+        self._attr_unique_id = f"{device_id}_temporary_pin_count"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=device_name,
+            manufacturer="Tuya",
+            model="Smart Lock",
+        )
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.temporary_passwords(self.device_id))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "temporary_passwords": self.coordinator.temporary_passwords(
+                self.device_id
+            )
+        }
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: LockCoordinator = hass.data[DOMAIN][entry.entry_id]
     mapping = await hass.async_add_executor_job(_mapping, hass)
@@ -180,6 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         name = device.get("name", device_id)
         for kind in ("time", "method", "user", "slot", "slot_name", "value", "count"):
             entities.append(LockAuditSensor(coordinator, device_id, kind, name))
+        entities.append(TemporaryPinCountSensor(coordinator, device_id, name))
     if devices:
         primary_device_id, primary_device = next(iter(devices.items()))
         primary_name = primary_device.get("name", primary_device_id)

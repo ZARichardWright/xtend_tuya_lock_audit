@@ -4,11 +4,14 @@ import asyncio
 from contextlib import suppress
 import logging
 import json
+import secrets
+import string
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from homeassistant.core import Context, HomeAssistant, callback
+from homeassistant.components import persistent_notification
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -16,6 +19,7 @@ from homeassistant.util import dt as dt_util
 from .client import TuyaClient, TuyaError
 from .const import DOMAIN, LOCK_CATEGORIES
 from .push import TuyaPushEvent, TuyaPushListener
+from .temporary_pin import encrypt_pin
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +42,10 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._push_refresh_task: asyncio.Task[None] | None = None
         self._push_expects_audit = False
         self._push_codes: set[str] = set()
+        self._pin_monitor_tasks: set[asyncio.Task[None]] = set()
+        self.temporary_pin_name: dict[str, str] = {}
+        self.temporary_pin_validity_hours: dict[str, float] = {}
+        self.temporary_pin_selected: dict[str, str] = {}
         self.client = TuyaClient(endpoint, access_id, access_secret)
         self.requested_device_id = device_id
         self.devices: dict[str, dict[str, Any]] = {}
@@ -130,6 +138,13 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._push_refresh_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._push_refresh_task
+        for task in self._pin_monitor_tasks:
+            task.cancel()
+        if self._pin_monitor_tasks:
+            await asyncio.gather(
+                *self._pin_monitor_tasks, return_exceptions=True
+            )
+        self._pin_monitor_tasks.clear()
         listener = self._push_listener
         self._push_listener = None
         if listener is not None:
@@ -187,6 +202,178 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             device_id,
             user_name,
         )
+
+    def temporary_passwords(self, device_id: str) -> list[dict[str, Any]]:
+        device = (self.data or {}).get("devices", {}).get(device_id, {})
+        passwords = device.get("temporary_passwords", [])
+        return passwords if isinstance(passwords, list) else []
+
+    async def async_create_temporary_pin(
+        self,
+        device_id: str,
+        name: str,
+        validity_minutes: int,
+        pin_length: int = 6,
+    ) -> dict[str, Any]:
+        """Create a PIN and monitor its delivery without storing the PIN in state."""
+        result = await self.hass.async_add_executor_job(
+            self._create_temporary_pin_sync,
+            device_id,
+            name,
+            validity_minutes,
+            pin_length,
+        )
+        password_id = str(result["password_id"])
+        notification_id = f"{DOMAIN}_temporary_pin_{password_id}"
+        persistent_notification.async_create(
+            self.hass,
+            self._pin_notification_message(result, "Configuring on lock"),
+            title="Tuya temporary PIN created",
+            notification_id=notification_id,
+        )
+        task = self.hass.async_create_task(
+            self._async_monitor_temporary_pin(result),
+            f"Tuya temporary PIN delivery {password_id}",
+        )
+        self._pin_monitor_tasks.add(task)
+        task.add_done_callback(self._pin_monitor_tasks.discard)
+        await self.async_request_refresh()
+        return result
+
+    def _create_temporary_pin_sync(
+        self,
+        device_id: str,
+        name: str,
+        validity_minutes: int,
+        pin_length: int,
+    ) -> dict[str, Any]:
+        pin = "".join(secrets.choice(string.digits) for _ in range(pin_length))
+        effective = dt_util.now() + timedelta(seconds=30)
+        invalid = effective + timedelta(minutes=validity_minutes)
+        ticket = self.client.post(
+            f"/v1.0/devices/{device_id}/door-lock/password-ticket"
+        ).get("result", {})
+        ticket_id = ticket.get("ticket_id")
+        ticket_key = ticket.get("ticket_key")
+        if not ticket_id or not ticket_key:
+            raise TuyaError(
+                "Password ticket response lacked ticket_id or ticket_key"
+            )
+        created = self.client.post(
+            f"/v1.0/devices/{device_id}/door-lock/temp-password",
+            {
+                "name": name,
+                "password": encrypt_pin(
+                    pin, str(ticket_key), self.client.access_secret
+                ),
+                "effective_time": int(effective.timestamp()),
+                "invalid_time": int(invalid.timestamp()),
+                "password_type": "ticket",
+                "ticket_id": ticket_id,
+                "type": 0,
+                "time_zone": str(dt_util.DEFAULT_TIME_ZONE),
+            },
+        )
+        password_id = created.get("result", {}).get("id")
+        if password_id is None:
+            raise TuyaError("Create response lacked a password ID")
+        LOGGER.info(
+            "Created temporary password %s for %s; awaiting lock delivery",
+            password_id,
+            device_id,
+        )
+        return {
+            "device_id": device_id,
+            "password_id": str(password_id),
+            "name": name,
+            "pin": pin,
+            "effective_time": effective,
+            "invalid_time": invalid,
+        }
+
+    @staticmethod
+    def _pin_notification_message(
+        created: dict[str, Any], delivery: str
+    ) -> str:
+        effective = created["effective_time"].strftime("%Y-%m-%d %H:%M:%S")
+        invalid = created["invalid_time"].strftime("%Y-%m-%d %H:%M:%S")
+        return (
+            f"**Name:** {created['name']}\n\n"
+            f"**PIN:** `{created['pin']}`\n\n"
+            f"**Valid:** {effective} to {invalid}\n\n"
+            f"**Delivery:** {delivery}\n\n"
+            f"**Password ID:** {created['password_id']}\n\n"
+            "Dismiss this notification after securely sharing the PIN."
+        )
+
+    async def _async_monitor_temporary_pin(
+        self, created: dict[str, Any]
+    ) -> None:
+        password_id = created["password_id"]
+        notification_id = f"{DOMAIN}_temporary_pin_{password_id}"
+        delivery = "Delivery status timed out; check the lock or Tuya app"
+        try:
+            for _attempt in range(12):
+                await asyncio.sleep(10)
+                details = await self.hass.async_add_executor_job(
+                    self.client.get,
+                    (
+                        f"/v1.0/devices/{created['device_id']}/door-lock/"
+                        f"temp-password/{password_id}"
+                    ),
+                )
+                status = details.get("result", {})
+                phase = status.get("phase")
+                serial_number = status.get("sn")
+                delivery_status = status.get("delivery_status")
+                if (
+                    phase == 12
+                    and isinstance(serial_number, int)
+                    and serial_number >= 0
+                ):
+                    delivery = f"Installed successfully in lock slot {serial_number}"
+                    break
+                if delivery_status == 2:
+                    delivery = "Tuya reported successful delivery"
+                    break
+                if phase in (3, 4, 5) or delivery_status in (3, 4, 5):
+                    delivery = (
+                        f"Stopped with phase {phase}, "
+                        f"delivery status {delivery_status}"
+                    )
+                    break
+        except asyncio.CancelledError:
+            raise
+        except TuyaError:
+            LOGGER.exception(
+                "Temporary PIN %s delivery monitoring failed", password_id
+            )
+            delivery = "Delivery check failed; inspect the Home Assistant log"
+        persistent_notification.async_create(
+            self.hass,
+            self._pin_notification_message(created, delivery),
+            title="Tuya temporary PIN",
+            notification_id=notification_id,
+        )
+        await self.async_request_refresh()
+
+    async def async_delete_temporary_pin(
+        self, device_id: str, password_id: str
+    ) -> None:
+        await self.hass.async_add_executor_job(
+            self.client.delete,
+            (
+                f"/v1.0/devices/{device_id}/door-lock/"
+                f"temp-passwords/{password_id}"
+            ),
+        )
+        persistent_notification.async_dismiss(
+            self.hass, f"{DOMAIN}_temporary_pin_{password_id}"
+        )
+        LOGGER.info(
+            "Deleted temporary password %s from %s", password_id, device_id
+        )
+        await self.async_request_refresh()
 
     async def _async_update_data(self) -> dict[str, Any]:
         LOGGER.debug("Starting Tuya lock coordinator refresh")
@@ -345,7 +532,13 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     f"/v1.1/devices/{device_id}/door-lock/open-logs",
                     {"page_no": 1, "page_size": 100, "start_time": start, "end_time": end},
                 ).get("result", {}).get("logs", [])
+                passwords = self.client.get(
+                    f"/v1.0/devices/{device_id}/door-lock/temp-passwords"
+                ).get("result", [])
                 device["status"] = status
+                device["temporary_passwords"] = (
+                    passwords if isinstance(passwords, list) else []
+                )
                 result["devices"][device_id] = device
                 LOGGER.debug(
                     "Device %s (%s) returned %d audit record(s)",

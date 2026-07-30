@@ -1,0 +1,39 @@
+create_temporary_pin:
+  fields:
+    device_id:
+      example: bf1234567890
+      selector:
+        text:
+    name:
+      required: true
+      example: Guest
+      selector:
+        text:
+    validity_minutes:
+      default: 1440
+      selector:
+        number:
+          min: 1
+          max: 43200
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    pin_length:
+      default: 6
+      selector:
+        select:
+          options:
+            - "6"
+            - "7"
+
+delete_temporary_pin:
+  fields:
+    device_id:
+      example: bf1234567890
+      selector:
+        text:
+    password_id:
+      required: true
+      example: "831660814"
+      selector:
+        text:

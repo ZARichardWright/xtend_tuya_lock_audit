@@ -1,5 +1,20 @@
 # Tuya Lock Audit release notes
 
+## 0.4.0 — 2026-07-30
+
+- Added native entities for temporary PIN management: name, validity, PIN
+  selection, create/delete buttons, and active PIN count.
+- Added `tuya_lock.create_temporary_pin` and
+  `tuya_lock.delete_temporary_pin` services for scripts and automations.
+- Generates six- or seven-digit PINs securely and keeps them out of entity
+  state and recorder history. New PINs are shown in a persistent notification.
+- Added asynchronous ten-second delivery checks for Tuya lock families that
+  report installed credentials as phase 12 and expose the assigned lock slot.
+- Added temporary-PIN inventory to coordinator refreshes and immediate refreshes
+  after create/delete operations.
+- Kept all Tuya HTTP calls, ticket decryption, PIN encryption, and blocking
+  work in Home Assistant's executor.
+
 ## 0.3.0 — 2026-07-30
 
 - Added a standalone Tuya Open Hub MQTT listener based on the push transport

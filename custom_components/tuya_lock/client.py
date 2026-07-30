@@ -114,3 +114,9 @@ class TuyaClient:
             if not self.access_token or time.time() >= self.token_expires:
                 self.authenticate()
             return self._request("POST", path, body=body)
+
+    def delete(self, path: str) -> dict[str, Any]:
+        with self._request_lock:
+            if not self.access_token or time.time() >= self.token_expires:
+                self.authenticate()
+            return self._request("DELETE", path)
