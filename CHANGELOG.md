@@ -1,5 +1,10 @@
 # Tuya Lock Audit release notes
 
+## 0.2.7 — 2026-07-30
+
+- Added the PNG brand asset required by HACS repository validation.
+- Added HACS-compatible GitHub repository description and topics.
+
 ## 0.2.6 — 2026-07-30
 
 - Attributes Home Assistant remote unlocks to the logged-in Home Assistant user
