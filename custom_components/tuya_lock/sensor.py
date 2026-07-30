@@ -89,6 +89,43 @@ class LockAuditSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
         return {"latest": records[0] if records else {}, "records": records[:20]}
 
 
+class LockAuditMarkdownSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
+    """Ready-to-render Markdown summary for a Lovelace Markdown card."""
+
+    def __init__(self, coordinator: LockCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_name = "Tuya Lock Audit Markdown"
+        self._attr_unique_id = "tuya_lock_audit_markdown"
+        self._attr_icon = "mdi:format-list-text"
+
+    @property
+    def native_value(self) -> int:
+        return len((self.coordinator.data or {}).get("logs", []))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        mapping = self.coordinator.mapping
+        records = [_record(item, mapping) for item in (self.coordinator.data or {}).get("logs", [])]
+        markdown = [
+            "## Tuya Lock Audit",
+            "",
+            "| Time | Device | Method | User | Slot |",
+            "|---|---|---|---|---|",
+        ]
+        for item in records[:20]:
+            values = (
+                item.get("time", "")[:19].replace("T", " "),
+                item.get("device_name", "").replace("|", "\\|"),
+                item.get("method", "").replace("|", "\\|"),
+                item.get("user", "") or "-",
+                (f"{item.get('slot')} — {item.get('slot_name')}" if item.get("slot") else "-"),
+            )
+            markdown.append("| " + " | ".join(values) + " |")
+        if not records:
+            markdown.append("| No unlock records found |  |  |  |  |")
+        return {"markdown": "\n".join(markdown), "record_count": len(records)}
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: LockCoordinator = hass.data[DOMAIN][entry.entry_id]
     mapping = _mapping(hass)
@@ -98,5 +135,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         name = device.get("name", device_id)
         for kind in ("time", "method", "user", "slot", "slot_name", "value", "count"):
             entities.append(LockAuditSensor(coordinator, device_id, kind, name))
+    entities.append(LockAuditMarkdownSensor(coordinator))
     _save_mapping(hass, mapping)
     async_add_entities(entities)
