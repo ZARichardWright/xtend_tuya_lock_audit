@@ -47,3 +47,5 @@ The lock API reports fingerprint slots, not people. Edit the generated file:
 
 Audit polling is implemented first. Temporary PIN management and lock control
 will be added after the standalone audit path has been tested.
+
+See [CHANGELOG.md](./CHANGELOG.md) for release notes.
