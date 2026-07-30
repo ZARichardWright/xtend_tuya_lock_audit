@@ -90,11 +90,19 @@ class LockAuditSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
 class LockAuditMarkdownSensor(CoordinatorEntity[LockCoordinator], SensorEntity):
     """Ready-to-render Markdown summary for a Lovelace Markdown card."""
 
-    def __init__(self, coordinator: LockCoordinator) -> None:
+    def __init__(
+        self, coordinator: LockCoordinator, device_id: str, device_name: str
+    ) -> None:
         super().__init__(coordinator)
         self._attr_name = "Tuya Lock Audit Markdown"
         self._attr_unique_id = "tuya_lock_audit_markdown"
         self._attr_icon = "mdi:format-list-text"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=device_name,
+            manufacturer="Tuya",
+            model="Smart Lock",
+        )
 
     @property
     def native_value(self) -> int:
@@ -130,6 +138,14 @@ class TuyaLockVersionSensor(SensorEntity):
     _attr_icon = "mdi:information-outline"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
+    def __init__(self, device_id: str, device_name: str) -> None:
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=device_name,
+            manufacturer="Tuya",
+            model="Smart Lock",
+        )
+
     @property
     def native_value(self) -> str:
         return VERSION
@@ -140,10 +156,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     mapping = await hass.async_add_executor_job(_mapping, hass)
     coordinator.mapping = mapping
     entities: list[LockAuditSensor] = []
-    for device_id, device in coordinator.data.get("devices", {}).items():
+    devices = coordinator.data.get("devices", {})
+    for device_id, device in devices.items():
         name = device.get("name", device_id)
         for kind in ("time", "method", "user", "slot", "slot_name", "value", "count"):
             entities.append(LockAuditSensor(coordinator, device_id, kind, name))
-    entities.append(LockAuditMarkdownSensor(coordinator))
-    entities.append(TuyaLockVersionSensor())
+    if devices:
+        primary_device_id, primary_device = next(iter(devices.items()))
+        primary_name = primary_device.get("name", primary_device_id)
+        entities.append(
+            LockAuditMarkdownSensor(coordinator, primary_device_id, primary_name)
+        )
+        entities.append(TuyaLockVersionSensor(primary_device_id, primary_name))
     async_add_entities(entities)

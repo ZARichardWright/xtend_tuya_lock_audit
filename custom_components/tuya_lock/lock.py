@@ -6,6 +6,7 @@ from typing import Any
 from homeassistant.components.lock import LockEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -23,6 +24,12 @@ class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
         self._attr_name = name
         self._attr_unique_id = f"{device_id}_lock"
         self._attr_icon = "mdi:lock"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=name,
+            manufacturer="Tuya",
+            model="Smart Lock",
+        )
         LOGGER.info("Created Home Assistant lock entity for %s (%s)", name, device_id)
 
     @property
@@ -52,11 +59,11 @@ class TuyaLockEntity(CoordinatorEntity[LockCoordinator], LockEntity):
         )
         return None
 
-    def lock(self, **kwargs: Any) -> None:
-        self.hass.async_create_task(self._async_operate(True))
+    async def async_lock(self, **kwargs: Any) -> None:
+        await self._async_operate(True)
 
-    def unlock(self, **kwargs: Any) -> None:
-        self.hass.async_create_task(self._async_operate(False))
+    async def async_unlock(self, **kwargs: Any) -> None:
+        await self._async_operate(False)
 
     async def _async_operate(self, lock: bool) -> None:
         LOGGER.info("Requesting %s operation for lock %s", "lock" if lock else "unlock", self.device_id)

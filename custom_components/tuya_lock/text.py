@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.text import TextEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -37,12 +38,25 @@ class FingerprintNameText(CoordinatorEntity[LockCoordinator], TextEntity):
     _attr_native_max = 80
     _attr_icon = "mdi:fingerprint"
 
-    def __init__(self, coordinator: LockCoordinator, slot: str, name: str) -> None:
+    def __init__(
+        self,
+        coordinator: LockCoordinator,
+        slot: str,
+        name: str,
+        device_id: str,
+        device_name: str,
+    ) -> None:
         super().__init__(coordinator)
         self.slot = slot
         self._attr_name = f"Fingerprint Slot {slot} Name"
         self._attr_unique_id = f"tuya_lock_fingerprint_slot_{slot}"
         self._attr_native_value = name
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_id)},
+            name=device_name,
+            manufacturer="Tuya",
+            model="Smart Lock",
+        )
 
     async def async_set_value(self, value: str) -> None:
         self.coordinator.mapping[self.slot] = value.strip()
@@ -65,4 +79,16 @@ async def async_setup_entry(
     for slot in slots:
         mapping.setdefault(slot, f"Fingerprint slot {slot}")
     await hass.async_add_executor_job(_save, hass, mapping)
-    async_add_entities([FingerprintNameText(coordinator, slot, mapping[slot]) for slot in sorted(slots)])
+    devices = (coordinator.data or {}).get("devices", {})
+    if not devices:
+        return
+    device_id, device = next(iter(devices.items()))
+    device_name = device.get("name", device_id)
+    async_add_entities(
+        [
+            FingerprintNameText(
+                coordinator, slot, mapping[slot], device_id, device_name
+            )
+            for slot in sorted(slots)
+        ]
+    )

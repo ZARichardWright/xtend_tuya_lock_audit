@@ -1,5 +1,14 @@
 # Tuya Lock Audit release notes
 
+## 0.2.3 — 2026-07-30
+
+- Replaced threaded lock callbacks with Home Assistant-native async lock and
+  unlock methods.
+- Fetches the real Tuya device name and product metadata when an explicit
+  device ID is configured.
+- Groups the lock entity, audit sensors, Markdown sensor, version sensor, and
+  fingerprint-name text entities under the same Home Assistant device.
+
 ## 0.2.2 — 2026-07-30
 
 - Added safe debug logging for config setup, cloud requests, device discovery,
