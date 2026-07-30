@@ -15,7 +15,8 @@
     "error": {
       "cannot_connect": "Unable to connect to Tuya",
       "not_a_lock": "The supplied device is not reporting lock functions",
-      "no_locks": "No lock devices were found"
+      "no_locks": "No lock devices were found",
+      "unknown": "Unexpected error; check the Home Assistant log"
     }
   }
 }

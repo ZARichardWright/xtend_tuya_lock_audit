@@ -1,5 +1,10 @@
 # Tuya Lock Audit release notes
 
+## 0.2.1 — 2026-07-30
+
+- Updated the config flow to the current Home Assistant typed flow pattern.
+- Added an explicit user-facing unknown-error message for flow validation failures.
+
 ## 0.2.0 — 2026-07-30
 
 - Restored the basic Home Assistant lock entity.

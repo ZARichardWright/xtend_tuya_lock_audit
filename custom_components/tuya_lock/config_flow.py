@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import voluptuous as vol
-from homeassistant import config_entries
-from homeassistant.core import callback
+from typing import Any
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.core import HomeAssistant
 
 from .client import TuyaClient, TuyaError
 from .const import CONF_ACCESS_ID, CONF_ACCESS_SECRET, CONF_DEVICE_ID, CONF_ENDPOINT, DEFAULT_ENDPOINT, DOMAIN
 
 
-class TuyaLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class TuyaLockConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
-        errors = {}
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
             try:
                 client = TuyaClient(user_input[CONF_ENDPOINT], user_input[CONF_ACCESS_ID], user_input[CONF_ACCESS_SECRET])
@@ -24,6 +25,8 @@ class TuyaLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
                 if "not found" in str(err).lower():
                     errors["base"] = "not_a_lock"
+            except Exception:
+                errors["base"] = "unknown"
         schema = vol.Schema({
             vol.Required(CONF_ENDPOINT, default=DEFAULT_ENDPOINT): str,
             vol.Required(CONF_ACCESS_ID): str,
