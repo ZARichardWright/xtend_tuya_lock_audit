@@ -1,5 +1,18 @@
 # Tuya Lock Audit release notes
 
+## 0.3.0 — 2026-07-30
+
+- Added a standalone Tuya Open Hub MQTT listener based on the push transport
+  used by Xtend Tuya.
+- Lock push events now trigger a debounced status and audit refresh after three
+  seconds; unlock events retry at ten and thirty seconds while waiting for the
+  cloud audit row.
+- Reduced periodic REST polling from once per minute to once every fifteen
+  minutes as a fallback when push delivery is unavailable.
+- Added thread-safe handoff from Paho MQTT callbacks to Home Assistant's event
+  loop, clean listener shutdown, reconnect backoff, and concurrent Tuya client
+  request protection.
+
 ## 0.2.7 — 2026-07-30
 
 - Added the PNG brand asset required by HACS repository validation.

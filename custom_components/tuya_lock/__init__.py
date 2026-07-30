@@ -44,13 +44,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
     LOGGER.debug("Forwarding config entry to platforms: %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    coordinator.async_start_push()
     LOGGER.info("Tuya Lock Audit platform setup completed")
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     LOGGER.debug("Unloading Tuya Lock Audit entry %s", entry.entry_id)
+    coordinator: LockCoordinator | None = hass.data.get(DOMAIN, {}).get(
+        entry.entry_id
+    )
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        if coordinator is not None:
+            await coordinator.async_shutdown()
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unloaded

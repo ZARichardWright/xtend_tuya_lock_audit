@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
 import time
 from urllib.parse import urlencode
 from typing import Any
@@ -24,6 +25,8 @@ class TuyaClient:
         self.access_secret = access_secret
         self.access_token = ""
         self.token_expires = 0.0
+        self.uid = ""
+        self._request_lock = threading.RLock()
 
     def _request(self, method: str, path: str, params: dict[str, Any] | None = None, body: dict[str, Any] | None = None) -> dict[str, Any]:
         query = urlencode(sorted((params or {}).items()), doseq=True)
@@ -70,29 +73,44 @@ class TuyaClient:
         raise TuyaError(data.get("msg", f"Tuya HTTP {response.status_code}"))
 
     def authenticate(self) -> None:
-        LOGGER.debug("Authenticating with Tuya endpoint %s", self.endpoint)
-        result = self._request("GET", "/v1.0/token", {"grant_type": 1})
-        token = result.get("result", {}).get("access_token")
-        if not token:
-            raise TuyaError("Tuya did not return an access token")
-        self.access_token = token
-        self.token_expires = time.time() + float(result.get("result", {}).get("expire_time", 7200)) - 60
-        LOGGER.debug("Tuya authentication succeeded")
+        with self._request_lock:
+            LOGGER.debug("Authenticating with Tuya endpoint %s", self.endpoint)
+            previous_token = self.access_token
+            self.access_token = ""
+            try:
+                result = self._request(
+                    "GET",
+                    "/v1.0/token",
+                    {"grant_type": 1},
+                )
+            except TuyaError:
+                self.access_token = previous_token
+                raise
+            token_data = result.get("result", {})
+            token = token_data.get("access_token")
+            if not token:
+                raise TuyaError("Tuya did not return an access token")
+            self.access_token = token
+            self.uid = str(token_data.get("uid", ""))
+            self.token_expires = time.time() + float(token_data.get("expire_time", 7200)) - 60
+            LOGGER.debug("Tuya authentication succeeded")
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        if not self.access_token or time.time() >= self.token_expires:
-            self.authenticate()
-        try:
-            return self._request("GET", path, params)
-        except TuyaError as err:
-            if "token" in str(err).lower() or "sign" in str(err).lower():
+        with self._request_lock:
+            if not self.access_token or time.time() >= self.token_expires:
                 self.authenticate()
+            try:
                 return self._request("GET", path, params)
-            raise
+            except TuyaError as err:
+                if "token" in str(err).lower() or "sign" in str(err).lower():
+                    self.authenticate()
+                    return self._request("GET", path, params)
+                raise
 
     def post(
         self, path: str, body: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        if not self.access_token or time.time() >= self.token_expires:
-            self.authenticate()
-        return self._request("POST", path, body=body)
+        with self._request_lock:
+            if not self.access_token or time.time() >= self.token_expires:
+                self.authenticate()
+            return self._request("POST", path, body=body)

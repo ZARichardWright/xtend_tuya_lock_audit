@@ -10,7 +10,8 @@ Xtend Tuya integration and does not replace it.
 - Configures directly with a Tuya IoT endpoint, Access ID, and Access Secret.
 - First filters Tuya devices to the smart-lock category family (`ms` and
   known lock subtypes), then confirms they report `unlock_*` lock functions.
-- Polls the lock open-log endpoint once per minute.
+- Uses Tuya Open Hub MQTT push events to refresh lock state and audit data
+  quickly, with a fifteen-minute REST poll as a fallback.
 - Exposes latest unlock method, user, fingerprint slot, slot name, raw value,
   and record count as Home Assistant sensors.
 - Attributes dashboard and app unlock requests to the logged-in Home Assistant
@@ -20,6 +21,10 @@ Xtend Tuya integration and does not replace it.
 
 The original Xtend Tuya integration can remain installed separately for other
 devices. This repository intentionally contains only `custom_components/tuya_lock`.
+
+If Tuya Open Hub is unavailable for the configured cloud project, the
+integration logs a warning, reconnects with bounded backoff, and continues to
+refresh through the fallback poll.
 
 ## Installation
 
@@ -47,7 +52,8 @@ The lock API reports fingerprint slots, not people. Edit the generated file:
 
 ## Status
 
-Audit polling is implemented first. Temporary PIN management and lock control
-will be added after the standalone audit path has been tested.
+Audit history, fingerprint mapping, Home Assistant user attribution, lock
+control, and event-driven refresh are implemented. Temporary PIN management is
+not yet exposed through the Home Assistant integration.
 
 See [CHANGELOG.md](./CHANGELOG.md) for release notes.

@@ -1,25 +1,30 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 import logging
 import json
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .client import TuyaClient, TuyaError
 from .const import DOMAIN, LOCK_CATEGORIES
+from .push import TuyaPushEvent, TuyaPushListener
 
 LOGGER = logging.getLogger(__name__)
 
 ATTRIBUTION_STORE_VERSION = 1
 REMOTE_UNLOCK_CODE = "unlock_phone_remote_kit"
-PENDING_ATTRIBUTION_TTL_MS = 10 * 60 * 1000
+PENDING_ATTRIBUTION_TTL_MS = 30 * 60 * 1000
+ATTRIBUTION_MATCH_WINDOW_MS = 10 * 60 * 1000
 MATCHED_ATTRIBUTION_TTL_MS = 45 * 24 * 60 * 60 * 1000
+PUSH_REFRESH_DELAYS = (3, 10, 30)
 
 
 class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -29,10 +34,107 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.pending_attributions: list[dict[str, Any]] = []
         self.matched_attributions: dict[str, dict[str, Any]] = {}
         self._attribution_store: Store[dict[str, Any]] | None = None
+        self._push_listener: TuyaPushListener | None = None
+        self._push_refresh_task: asyncio.Task[None] | None = None
+        self._push_expects_audit = False
+        self._push_codes: set[str] = set()
         self.client = TuyaClient(endpoint, access_id, access_secret)
         self.requested_device_id = device_id
         self.devices: dict[str, dict[str, Any]] = {}
-        super().__init__(hass, logging.getLogger(__name__), name="tuya_lock_audit", update_interval=timedelta(seconds=60))
+        super().__init__(
+            hass,
+            logging.getLogger(__name__),
+            name="tuya_lock_audit",
+            update_interval=timedelta(minutes=15),
+        )
+
+    @callback
+    def async_start_push(self) -> None:
+        """Start Tuya Open Hub without blocking Home Assistant."""
+        if self._push_listener is not None:
+            return
+        self._push_listener = TuyaPushListener(
+            self.client,
+            set(self.devices),
+            self._handle_push_from_thread,
+        )
+        self._push_listener.start()
+        LOGGER.info(
+            "Started Tuya Open Hub listener for %d lock device(s); "
+            "fallback polling interval is 15 minutes",
+            len(self.devices),
+        )
+
+    def _handle_push_from_thread(self, event: TuyaPushEvent) -> None:
+        """Hand a Paho callback safely to the Home Assistant event loop."""
+        try:
+            self.hass.loop.call_soon_threadsafe(
+                self._async_handle_push_event,
+                event,
+            )
+        except RuntimeError:
+            LOGGER.debug("Home Assistant stopped before push event delivery")
+
+    @callback
+    def _async_handle_push_event(self, event: TuyaPushEvent) -> None:
+        if event.device_id not in self.devices:
+            return
+        self._push_codes.update(event.codes)
+        self._push_expects_audit |= event.expects_audit
+        if self._push_refresh_task and not self._push_refresh_task.done():
+            LOGGER.debug(
+                "Coalesced Tuya push event for %s into pending refresh",
+                event.device_id,
+            )
+            return
+        self._push_refresh_task = self.hass.async_create_task(
+            self._async_refresh_after_push(),
+            "Tuya lock audit refresh after push",
+        )
+
+    async def _async_refresh_after_push(self) -> None:
+        baseline = max(
+            (
+                int(item.get("update_time", 0))
+                for item in (self.data or {}).get("logs", [])
+            ),
+            default=0,
+        )
+        previous_delay = 0
+        try:
+            for delay in PUSH_REFRESH_DELAYS:
+                await asyncio.sleep(delay - previous_delay)
+                previous_delay = delay
+                LOGGER.debug(
+                    "Refreshing Tuya lock data after push; codes=%s attempt=%ss",
+                    sorted(self._push_codes),
+                    delay,
+                )
+                await self.async_request_refresh()
+                latest = max(
+                    (
+                        int(item.get("update_time", 0))
+                        for item in (self.data or {}).get("logs", [])
+                    ),
+                    default=0,
+                )
+                if latest > baseline or not self._push_expects_audit:
+                    break
+        finally:
+            self._push_codes.clear()
+            self._push_expects_audit = False
+
+    async def async_shutdown(self) -> None:
+        """Stop push tasks and the MQTT network thread."""
+        if self._push_refresh_task and not self._push_refresh_task.done():
+            self._push_refresh_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._push_refresh_task
+        listener = self._push_listener
+        self._push_listener = None
+        if listener is not None:
+            await self.hass.async_add_executor_job(listener.stop)
+            LOGGER.info("Stopped Tuya Open Hub push listener")
 
     async def async_load_attributions(self) -> None:
         """Load pending and matched Home Assistant unlock attribution."""
@@ -163,7 +265,7 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 and self._attribution_key(record) not in claimed_keys
                 and requested_at - 3_000
                 <= int(record.get("update_time", 0))
-                <= requested_at + PENDING_ATTRIBUTION_TTL_MS
+                <= requested_at + ATTRIBUTION_MATCH_WINDOW_MS
             ]
             if not candidates:
                 remaining.append(pending)
@@ -268,10 +370,8 @@ class LockCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise
 
     def _discover_ids(self) -> list[str]:
-        token = self.client.get("/v1.0/token", {"grant_type": 1}).get("result", {})
-        self.client.access_token = token.get("access_token", "")
-        self.client.token_expires = __import__("time").time() + float(token.get("expire_time", 7200)) - 60
-        uid = token.get("uid")
+        self.client.authenticate()
+        uid = self.client.uid
         if not uid:
             raise TuyaError("Tuya token response did not contain a user ID")
         devices = self.client.get(f"/v1.0/users/{uid}/devices").get("result", [])
